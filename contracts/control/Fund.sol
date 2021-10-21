@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./../data/DataStructure.sol";
-import "./LoanApplicationControl.sol";
+import "./LoanApplication.sol";
 
 /**
  * @author GeorgeQing
@@ -61,16 +61,16 @@ contract Fund is DataStructure, AccessControl {
      * Only admin can call this function
      */
     function grantLoan(uint applicationId) public onlyRole(ADMIN_ROLES) {
-        LoanApplicationControl applicationControl = new LoanApplicationControl();
-        LoanApplication memory application = applicationControl.getApplication(applicationId);
+        LoanApplication loanApplication = new LoanApplication();
+        Application memory application = loanApplication.getApplication(applicationId);
 
         // check the state
-        require(application.state == LoanApplicationState.APPROVED, "LoanApplication: The application is not ready for loan.");
+        require(application.state == ApplicationState.APPROVED, "LoanApplication: The application is not ready for loan.");
 
         require(applicationToLoan[applicationId] == 0, "LoanApplication: A loan has already been granted for this application.");
 
         // Effects, to prevent reentry attack
-        // application.state = LoanApplicationState.PAID;
+        // application.state = ApplicationState.PAID;
 
         uint loanId = loanIdCounter ++;
         // mapping from applicationId to loanId;

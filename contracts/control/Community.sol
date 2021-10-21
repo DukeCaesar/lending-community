@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
  * @author George Qing, Jieshu Tech. Ltd.
  * @dev This contract manages the community of the mutual insurance. Candidate can join or leave the community, as well as refresh their membership by paying regularly the shared expenses.
  */
-contract ComunityAction is DataStructure, AccessControl {
+contract Community is DataStructure, AccessControl {
 
     bytes32 constant private ADMIN_ROLES = "admin_roles";
     mapping(address => MemberData) private members;
@@ -52,7 +52,7 @@ contract ComunityAction is DataStructure, AccessControl {
      */
     function joinCommunity() external returns (bool) {
         // check if msg.sender has already joined the community
-        require(!members[msg.sender].membership, "ComunityAction: Already a member." );
+        require(!members[msg.sender].membership, "Comunity: Already a member." );
 
         members[msg.sender].membership = true;
         members[msg.sender].joinTime = block.timestamp;
@@ -90,7 +90,7 @@ contract ComunityAction is DataStructure, AccessControl {
      * @dev only member can call the function
      */
     modifier onlyMember {
-        require(members[msg.sender].membership, "ComunityAction: Not a member yet.");
+        require(members[msg.sender].membership, "Comunity: Not a member yet.");
         _;
     }
 
@@ -108,11 +108,11 @@ contract ComunityAction is DataStructure, AccessControl {
      * @param borrower the member who makes a clain for reimbursement
      */
     function checkIncubation(address borrower) public view onlyMember {
-        require(borrower != address(0), "ComunityAction: The borrower address is empty.");
+        require(borrower != address(0), "Comunity: The borrower address is empty.");
 
         uint currentTime = block.timestamp;
         uint joinTime = members[borrower].joinTime;
 
-        require(currentTime > (joinTime + waitingTime), "ComunityAction: Borrower is still in waiting time and not allowed to apply for loans yet.");
+        require(currentTime > (joinTime + waitingTime), "Comunity: Borrower is still in waiting time and not allowed to apply for loans yet.");
     }   
 }

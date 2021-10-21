@@ -18,7 +18,7 @@ contract DataStructure {
      * PENDING: this loan has been in pending state, for instance more documents need to be provided to prove for eligibility
      * PAID: this loan has been paid for by the community fund
      */
-    enum LoanApplicationState {
+    enum ApplicationState {
         NONEXISTENT, 
         CREATED, 
         WAITINGFORAPPROVAL,
@@ -29,12 +29,12 @@ contract DataStructure {
     }    
 
     // the Loan struct contains the data of each loan
-    struct LoanApplication {
+    struct Application {
         address borrower;
         uint amountLoaned; // the amount loaned by the borrower
         uint loanTerm; // the duration of the loan
         uint applicationTime;
-        LoanApplicationState state; // the state of the loan application
+        ApplicationState state; // the state of the loan application
         uint amountApproved; // the final amount approved by the community
         uint approvalTime;
     }    

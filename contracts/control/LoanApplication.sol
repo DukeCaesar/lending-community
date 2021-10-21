@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./../data/DataStructure.sol";
-import "./CommunityAction.sol";
+import "./Community.sol";
 import "./Fund.sol";
 
 /**
@@ -11,12 +11,12 @@ import "./Fund.sol";
  * @dev This contract manages the applications made by community members.
  */
 
-contract LoanApplicationControl is DataStructure, AccessControl {
+contract LoanApplication is DataStructure, AccessControl {
     uint private applicationIdCounter; 
 
-    mapping(uint => LoanApplication) private applications;    
+    mapping(uint => Application) private applications;    
 
-    mapping(address => LoanApplication) private pendingLoans; // the exising applications which has not been finished yet.
+    mapping(address => Application) private pendingLoans; // the exising applications which has not been finished yet.
 
     uint private maximumAmount; // the maximum amount allowed for any loan
 
@@ -57,7 +57,7 @@ contract LoanApplicationControl is DataStructure, AccessControl {
         
         // create a new loan and record its data
         uint applicationId = applicationIdCounter;
-        applications[applicationId].state = LoanApplicationState.CREATED;
+        applications[applicationId].state = ApplicationState.CREATED;
         applications[applicationId].borrower = msg.sender;
         applications[applicationId].applicationTime = block.timestamp;
         applications[applicationId].loanTerm = loanTerm;
@@ -76,8 +76,8 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      Otherwise, an error message will be sent back.
      */
     function checkIncubation(address borrower) internal {
-        ComunityAction communityAction = new ComunityAction();
-        communityAction.checkIncubation(borrower);
+        Community community = new Community();
+        community.checkIncubation(borrower);
     }    
 
     /**
@@ -86,11 +86,11 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      */    
     function approveLoan(uint applicationId, uint amountApproved) external onlyRole(ADMIN_ROLES) {
         // Check
-        // The default state is LoanApplicationState.NONEXISTENT.
-        require(applications[applicationId].state == LoanApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
+        // The default state is ApplicationState.NONEXISTENT.
+        require(applications[applicationId].state == ApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
 
         // Effects
-        applications[applicationId].state = LoanApplicationState.APPROVED;
+        applications[applicationId].state = ApplicationState.APPROVED;
         applications[applicationId].approvalTime = block.timestamp;
         applications[applicationId].amountApproved = amountApproved;
 
@@ -105,9 +105,9 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      */
     function declineLoan(uint applicationId) external {
         // Check
-        require(applications[applicationId].state == LoanApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
+        require(applications[applicationId].state == ApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
 
-        applications[applicationId].state = LoanApplicationState.DELINED;
+        applications[applicationId].state = ApplicationState.DELINED;
         applications[applicationId].approvalTime = block.timestamp;
 
         emit ApplicationDeclined(applications[applicationId].borrower, applicationId);
@@ -117,9 +117,9 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      * @dev Request borrower to provide more proof for his or her loan.
      */
     function requestMoreProof(uint applicationId) external {
-        require(applications[applicationId].state == LoanApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
+        require(applications[applicationId].state == ApplicationState.WAITINGFORAPPROVAL, "LoanApplication: The specified loan with Id does not exist.");
 
-        applications[applicationId].state = LoanApplicationState.MOREDOCUMENTSNEEDED;
+        applications[applicationId].state = ApplicationState.MOREDOCUMENTSNEEDED;
 
         emit RequestMoreProof(applications[applicationId].borrower, applicationId);
     }
@@ -128,9 +128,9 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      * @dev Loaner provide more proof for his or her loan and request for approval decision
      */
     function provideMoreProof(uint applicationId) external {
-        require(applications[applicationId].state == LoanApplicationState.MOREDOCUMENTSNEEDED, "LoanApplication: The specified loan is not in the right state.");
+        require(applications[applicationId].state == ApplicationState.MOREDOCUMENTSNEEDED, "LoanApplication: The specified loan is not in the right state.");
 
-        applications[applicationId].state = LoanApplicationState.WAITINGFORAPPROVAL;
+        applications[applicationId].state = ApplicationState.WAITINGFORAPPROVAL;
 
         emit MoreProofProvided(applications[applicationId].borrower, applicationId);
     }    
@@ -157,9 +157,9 @@ contract LoanApplicationControl is DataStructure, AccessControl {
      * @param applicationId Application Id for which details will be retrieved
      */
      //  Data location must be "memory" or "calldata" for return parameter in function, but "storage" was given.
-    function getApplication(uint applicationId) public view returns(LoanApplication memory) {
+    function getApplication(uint applicationId) public view returns(Application memory) {
         // Check if the application of this id exist
-        require(applications[applicationId].state != LoanApplicationState.NONEXISTENT, "LoanApplication: The specified loan with Id does not exist.");    
+        require(applications[applicationId].state != ApplicationState.NONEXISTENT, "LoanApplication: The specified loan with Id does not exist.");    
 
         return applications[applicationId];
     }
