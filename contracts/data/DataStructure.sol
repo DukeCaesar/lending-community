@@ -44,9 +44,11 @@ contract DataStructure {
         uint amountLoaned; // the amount loaned by the borrower                
         uint loanTerm; // the duration of the loan, in terms of months.
         uint installment; // the number of installment that borrower will need to pay back the full loan
+        uint installmentRepaid; // the number of installment borrower has already paid back
         uint grantTime; // the time when the loan has been granted to the borrower
         uint amountDue; // the amount of the loan which remains to be returned by the borrower
-        uint interestRateReciprocal; // the interest rate on the loan
+        uint interestRate; // daily interest rate, unit being 1 divided by a hundred thousand
         uint interestPaid; // the aggregate interests paid by the borrower
+        bool fullyRepaid; // whether this loan is fully repaid back by the borrower
     }
 }

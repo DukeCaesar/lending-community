@@ -16,15 +16,22 @@ contract Fund is DataStructure, AccessControl {
 
     event DepositSuccess(address indexed creditor);
     event WithdrawSuccess(address indexed creditor);
+    event PaymentReceived(address indexed payer, uint amount);
+    event LoanRepaymentSuccess(uint loanId, address indexed borrower, uint amount);
+    event LoanFullyRepaid(uint loanId, address indexed borrower);
 
     bytes32 constant private ADMIN_ROLES = "admin_roles";
 
-    uint interestRateReciprocal = 25;  // interest rate is 4 / 100 = 1 / interestRateReciprocal
+    uint interestRate = 20;  // the default daily interest rate, unit being 1 divided by a hundred thousand
 
-    uint loanIdCounter;
+    uint idCounter;
     mapping(uint => Loan) loans; // mapping from loanId to Loan    
 
     mapping(uint => uint) applicationToLoan; // mapping from applicationId to loanId;
+
+    receive() external payable {
+        emit PaymentReceived(msg.sender, msg.value);
+    }
 
     /**
      * @dev Community members can invest into the lending fund and earn interests
@@ -65,14 +72,14 @@ contract Fund is DataStructure, AccessControl {
         Application memory application = loanApplication.getApplication(applicationId);
 
         // check the state
-        require(application.state == ApplicationState.APPROVED, "LoanApplication: The application is not ready for loan.");
+        require(application.state == ApplicationState.APPROVED, "Fund: The application is not ready for loan.");
 
-        require(applicationToLoan[applicationId] == 0, "LoanApplication: A loan has already been granted for this application.");
+        require(applicationToLoan[applicationId] == 0, "Fund: A loan has already been granted for this application.");
 
         // Effects, to prevent reentry attack
         // application.state = ApplicationState.PAID;
 
-        uint loanId = loanIdCounter ++;
+        uint loanId = idCounter ++;
         // mapping from applicationId to loanId;
         applicationToLoan[applicationId] = loanId;
 
@@ -80,28 +87,70 @@ contract Fund is DataStructure, AccessControl {
         // populate a loan struct with new data
           
 
-        loans[loanIdCounter].borrower = application.borrower;
-        loans[loanIdCounter].amountLoaned = application.amountApproved;
-        loans[loanIdCounter].loanTerm = application.loanTerm;
-        loans[loanIdCounter].grantTime = block.timestamp;
-        loans[loanIdCounter].interestRateReciprocal = interestRateReciprocal;
+        loans[idCounter].borrower = application.borrower;
+        loans[idCounter].amountLoaned = application.amountApproved;
+        loans[idCounter].loanTerm = application.loanTerm;
+        loans[idCounter].grantTime = block.timestamp;
+        loans[idCounter].interestRate = interestRate;
 
         // Usually the number of installment equals loan term. 
         // a 6 month term equals 6 installments. However, in future, installments could be twice of loan terms
-        loans[loanIdCounter].installment = application.loanTerm; 
+        loans[idCounter].installment = application.loanTerm; 
 
-        loans[loanIdCounter].amountDue = application.amountApproved;
-        loans[loanIdCounter].interestPaid = 0;
+        loans[idCounter].amountDue = application.amountApproved;
+        loans[idCounter].interestPaid = 0;
 
         address payable borrower = payable(application.borrower);
 
-        uint amountLoaned = loans[loanIdCounter].amountLoaned;
+        uint amountLoaned = loans[idCounter].amountLoaned;
 
-        require(address(this).balance > amountLoaned, "LoanApplication: There is not enough fund in the community pool for paying out the borrower.");
+        require(address(this).balance > amountLoaned, "Fund: There is not enough fund in the community pool.");
 
         // This forwards all available gas. Be sure to check the return value!
         (bool success, ) = borrower.call{value: amountLoaned}("");
 
-        require(success, "LoanAction: Transfer loan to borrower has failed.");     
+        require(success, "Fund: Transfer loan to borrower has failed.");     
     }    
+
+    /**
+     * @dev Borrowers call this function to repay their loans
+     */
+    function repayLoan(uint loanId) external payable {
+        // Check if loan with this loanId does exist or not
+        require(loans[loanId].borrower != address(0), "Fund: Loan does not exist.");
+
+        // Ensure that loan borrower is the same as the repayer.
+        // In future, it be allowed for other members to repay a loan on behalf of a borrower
+        require(loans[loanId].borrower == msg.sender, "Fund: Payer is different from loan borrower.");
+
+        // calculate the days lapsed, block.timestamp (uint): block timestamp as seconds since unix epoch
+        uint daysLapsed = (block.timestamp - loans[loanId].grantTime) % 86400;
+
+        // calculate the interest until this repayment
+        uint interest = uint(loans[loanId].amountDue * daysLapsed * loans[loanId].interestRate / 100000);
+
+        // calculate the principle per installment that needs to be repaied
+        uint principal = uint(loans[loanId].amountLoaned / loans[loanId].installment);
+
+        // Ensure repayment should be sufficient to cover both principal and interest
+        require(msg.value >= (principal + interest), "Fund: Repayment is too small.");
+
+        uint principalRepayed = msg.value - interest;
+
+        // update te loan information
+        loans[loanId].interestPaid += interest;
+
+        if (loans[loanId].amountDue > principalRepayed) {
+            loans[loanId].amountDue -= principalRepayed;
+        } else {
+            // loans[loanId].amountDue =< principalRepayed, meaning borrower has repaid more than needed.
+            loans[loanId].amountDue = 0;
+            loans[loanId].fullyRepaid = true;
+            emit LoanFullyRepaid(loanId, msg.sender);
+        }
+        
+        loans[loanId].installmentRepaid ++;
+
+        emit LoanRepaymentSuccess(loanId, msg.sender, msg.value);
+    }
 }
