@@ -225,6 +225,7 @@ contract Fund is Roles, DataStructure, AccessControl {
 
     /**
      * @dev Interest income is distributed among investors who have deposited fund into the community
+     * @return completed Returns a bool indicating whether the distrubtion has iterated all investors.
      */
     function distributeInterest() external payable onlyRole(ADMIN_ROLES) returns(bool completed){
         require(interestsReceived > 0, "Fund: No interests to be distributed yet.");
@@ -263,6 +264,8 @@ contract Fund is Roles, DataStructure, AccessControl {
             // update startIndex for next call of this function 
             startIndex = endIndex + 1;
         }
+
+        return completed;
         
     }
 }
