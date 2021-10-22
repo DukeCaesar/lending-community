@@ -12,6 +12,9 @@ import "./../access/Roles.sol";
  */
 contract Fund is Roles, DataStructure, AccessControl {
     mapping(address => uint) balances; 
+    address[] investors; // record the members who has deposited money into the community
+    mapping(address => uint) investorIndexes; // the index of each investor in the investors array
+    uint startIndex; // the starting index when distributing interest income
 
     mapping(address => uint) depositTime; // record the last time when the member made a deposit
 
@@ -32,6 +35,7 @@ contract Fund is Roles, DataStructure, AccessControl {
     event LoanGranted(uint loanId, uint amount, address indexed borrower);
     event LoanFullyRepaid(uint loanId, address indexed borrower);
     event DepositLockTimeUpdated(uint oldLockTime, uint newLockTime);
+    event InterestDistributed(uint amount);
 
     uint interestRate = 20;  // the default daily interest rate, unit being 1 divided by a hundred thousand
 
@@ -50,6 +54,16 @@ contract Fund is Roles, DataStructure, AccessControl {
     function deposit() external payable {
         uint amount = msg.value;
         uint currentBalance = balances[msg.sender];
+
+        // add this new investor to the investors array
+        if (currentBalance == 0) {
+            // first record the index of the specific address in the investor array, so that future retrieval by address is possible
+            uint size = investors.length;
+            investorIndexes[msg.sender] = size;
+            // then add to investor array
+            investors.push(msg.sender);
+        }
+
         balances[msg.sender] = currentBalance + amount;
 
         // update the total amount
@@ -66,12 +80,25 @@ contract Fund is Roles, DataStructure, AccessControl {
      * @param amount The amount to withdraw
      */
     function withdraw(uint amount) external {
+        require(amount > 0, "Fund: Withdraw amount should not be zero.");
+
         require(balances[msg.sender] >= amount, "Fund: Balance insufficient for withdrawal.");
 
         require(block.timestamp > (depositTime[msg.sender] + depositLockTime), "Fund: Withdrawal is close to a recent deposit.");
 
         uint currentBalance = balances[msg.sender];
         balances[msg.sender] = currentBalance - amount;
+
+        // remove this investor to the investors array
+        if (balances[msg.sender] == 0) {
+            // retrieve array index for this investor
+            uint index = investorIndexes[msg.sender];
+            address last = investors[investors.length-1];
+            // to remove from the end of the array.
+            investors.pop();
+            // replace the withdrawing investor with the last one in the array, therefore removing the possibility of empty slot in the investors array
+            investors[index] = last;
+        }
 
         // update the total amount
         vault = vault - amount;
@@ -194,5 +221,48 @@ contract Fund is Roles, DataStructure, AccessControl {
         accruedInterests += interest;
 
         emit LoanRepaymentSuccess(loanId, msg.sender, msg.value);
+    }
+
+    /**
+     * @dev Interest income is distributed among investors who have deposited fund into the community
+     */
+    function distributeInterest() external payable onlyRole(ADMIN_ROLES) returns(bool completed){
+        require(interestsReceived > 0, "Fund: No interests to be distributed yet.");
+
+        uint investorNum = investors.length;
+        uint endIndex = investors.length - 1;
+
+        // In order to present gas depletion, curb the maximum iteration to 100
+        if ((investorNum - 1 - startIndex) > 99) {
+            endIndex = startIndex + 99;
+            completed = false;
+        } else {
+            completed = true;
+        }
+        
+        for (uint i=startIndex; i<=endIndex; i++) {
+            // calculate the share of interest income for each investor
+            address investor = investors[i];
+            uint interestShare = uint(interestsReceived * balances[investor] / vault);
+
+            // This forwards all available gas. Be sure to check the return value!
+            (bool success, ) = investor.call{value: interestShare}("");
+
+            require(success, "Fund: Transfer interest income to investor has failed.");                 
+        }
+        
+        if (completed) {
+            // reset the startIndex
+            startIndex = 0;
+
+            emit InterestDistributed(interestsReceived);
+            // reset the interestsReceived, since all interests received have been distributed to investors
+            interestsReceived = 0;
+            
+        } else {
+            // update startIndex for next call of this function 
+            startIndex = endIndex + 1;
+        }
+        
     }
 }
