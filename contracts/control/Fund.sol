@@ -4,23 +4,34 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./../data/DataStructure.sol";
 import "./LoanApplication.sol";
+import "./../access/Roles.sol";
 
 /**
  * @author GeorgeQing
  * @dev Manages the fund of the mutual lending community
  */
-contract Fund is DataStructure, AccessControl {
+contract Fund is Roles, DataStructure, AccessControl {
     mapping(address => uint) balances; 
 
-    uint private vault; // the accumulated amount of the community
+    mapping(address => uint) depositTime; // record the last time when the member made a deposit
+
+    uint public depositLockTime = 86400; // the time when a new deposit will be locked up and prevented from withdrawn. The default value is 1 day = 86400 seconds. This can be modified by admin
+
+    uint public vault; // the accumulated amount deposited by the community
+    uint public loanOutstanding; // the sum of loans outstanding
+    uint public interestsReceived; // the interests received from borrowers, and not yet distributed to members
+    uint public provision; // provision for bad and doubtful loans
+
+    uint public accruedLoans; // the sum of all loans lent out to members since operation
+    uint public accruedInterests; // the sum of all interests received since operation
 
     event DepositSuccess(address indexed creditor);
     event WithdrawSuccess(address indexed creditor);
     event PaymentReceived(address indexed payer, uint amount);
     event LoanRepaymentSuccess(uint loanId, address indexed borrower, uint amount);
+    event LoanGranted(uint loanId, uint amount, address indexed borrower);
     event LoanFullyRepaid(uint loanId, address indexed borrower);
-
-    bytes32 constant private ADMIN_ROLES = "admin_roles";
+    event DepositLockTimeUpdated(uint oldLockTime, uint newLockTime);
 
     uint interestRate = 20;  // the default daily interest rate, unit being 1 divided by a hundred thousand
 
@@ -44,14 +55,20 @@ contract Fund is DataStructure, AccessControl {
         // update the total amount
         vault = vault + amount;
 
+        // record the deposit time for this member
+        depositTime[msg.sender] = block.timestamp;
+
         emit DepositSuccess(msg.sender);
     }
 
     /**
      * @dev Community members can withdraw their fund
+     * @param amount The amount to withdraw
      */
     function withdraw(uint amount) external {
         require(balances[msg.sender] >= amount, "Fund: Balance insufficient for withdrawal.");
+
+        require(block.timestamp > (depositTime[msg.sender] + depositLockTime), "Fund: Withdrawal is close to a recent deposit.");
 
         uint currentBalance = balances[msg.sender];
         balances[msg.sender] = currentBalance - amount;
@@ -63,7 +80,19 @@ contract Fund is DataStructure, AccessControl {
     }
 
     /**
-     * @dev Pay the reimbursement for the claim, i.e. paying out the fund requested by the claimer.
+     * @dev Set the lock time for a deposit. The deposit can only be withdrawn after the lock time
+     * @param lockTime The new lock time.
+     */
+    function setDepositLockTime(uint lockTime) public onlyRole(ADMIN_ROLES) {
+        require(lockTime > depositLockTime, "Fund: The new lock time is smalller than the default value.");
+        uint oldLockTime = depositLockTime;
+        depositLockTime = lockTime;
+
+        emit DepositLockTimeUpdated(oldLockTime, depositLockTime);
+    }
+
+    /**
+     * @dev Grant the loan to the borrower.
      * @param applicationId The id of the loan application
      * Only admin can call this function
      */
@@ -85,7 +114,6 @@ contract Fund is DataStructure, AccessControl {
 
         // Interactions
         // populate a loan struct with new data
-          
 
         loans[idCounter].borrower = application.borrower;
         loans[idCounter].amountLoaned = application.amountApproved;
@@ -106,14 +134,22 @@ contract Fund is DataStructure, AccessControl {
 
         require(address(this).balance > amountLoaned, "Fund: There is not enough fund in the community pool.");
 
+        // update the total amount
+        vault -= amountLoaned;
+        loanOutstanding += amountLoaned;
+        accruedLoans += amountLoaned;
+
         // This forwards all available gas. Be sure to check the return value!
         (bool success, ) = borrower.call{value: amountLoaned}("");
 
         require(success, "Fund: Transfer loan to borrower has failed.");     
+
+        emit LoanGranted(loanId, amountLoaned, loans[idCounter].borrower);
     }    
 
     /**
      * @dev Borrowers call this function to repay their loans
+     * @param loanId The loan to be repaid
      */
     function repayLoan(uint loanId) external payable {
         // Check if loan with this loanId does exist or not
@@ -150,6 +186,12 @@ contract Fund is DataStructure, AccessControl {
         }
         
         loans[loanId].installmentRepaid ++;
+
+        // update the total amount
+        vault += principalRepayed;
+        // update the loan outstanding
+        loanOutstanding -= principalRepayed;
+        accruedInterests += interest;
 
         emit LoanRepaymentSuccess(loanId, msg.sender, msg.value);
     }

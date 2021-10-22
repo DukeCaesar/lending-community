@@ -5,13 +5,14 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./../data/DataStructure.sol";
 import "./Community.sol";
 import "./Fund.sol";
+import "./../access/Roles.sol";
 
 /**
  * @author George Qing, Jieshu Tech. Ltd.
  * @dev This contract manages the applications made by community members.
  */
 
-contract LoanApplication is DataStructure, AccessControl {
+contract LoanApplication is Roles, DataStructure, AccessControl {
     uint private applicationIdCounter; 
 
     mapping(uint => Application) private applications;    
@@ -21,8 +22,6 @@ contract LoanApplication is DataStructure, AccessControl {
     uint private maximumAmount; // the maximum amount allowed for any loan
 
     uint private maximumTerm; // the maximum term allowed for any loan
-
-    bytes32 constant private ADMIN_ROLES = "admin_roles";
 
     event LoanApplicationCreated(address indexed borrower, uint applicationId);
     event RequestMoreProof(address indexed borrower, uint applicationId);

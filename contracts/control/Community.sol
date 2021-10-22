@@ -4,14 +4,14 @@ pragma solidity ^0.8.0;
 import "./../data/DataStructure.sol";
 import "./Fund.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "./../access/Roles.sol";
 
 /**
  * @author George Qing, Jieshu Tech. Ltd.
- * @dev This contract manages the community of the mutual insurance. Candidate can join or leave the community, as well as refresh their membership by paying regularly the shared expenses.
+ * @dev This contract manages the membership of this community. Candidate can join or leave the community.
  */
-contract Community is DataStructure, AccessControl {
+contract Community is Roles, DataStructure, AccessControl {
 
-    bytes32 constant private ADMIN_ROLES = "admin_roles";
     mapping(address => MemberData) private members;
 
     uint private memberCount;
@@ -41,10 +41,7 @@ contract Community is DataStructure, AccessControl {
      This is the function that is executed on plain Ether transfers (e.g. via .send() or .transfer()).
      */
     receive() external payable {
-        address payer = msg.sender;
-        uint amount = msg.value;
-
-        emit PaymentReceived(payer, amount);
+        emit PaymentReceived(msg.sender, msg.value);
     }
 
     /**
@@ -52,7 +49,7 @@ contract Community is DataStructure, AccessControl {
      */
     function joinCommunity() external returns (bool) {
         // check if msg.sender has already joined the community
-        require(!members[msg.sender].membership, "Comunity: Already a member." );
+        require(!members[msg.sender].membership, "Community: Already a member." );
 
         members[msg.sender].membership = true;
         members[msg.sender].joinTime = block.timestamp;
@@ -90,7 +87,7 @@ contract Community is DataStructure, AccessControl {
      * @dev only member can call the function
      */
     modifier onlyMember {
-        require(members[msg.sender].membership, "Comunity: Not a member yet.");
+        require(members[msg.sender].membership, "Community: Not a member yet.");
         _;
     }
 
@@ -103,16 +100,16 @@ contract Community is DataStructure, AccessControl {
 
     /**
      * @dev Check if the waiting time has already passed.
-     If the waiting period is over, member is allowed to make claims for reimbursement.
+     If the waiting period is over, member is allowed to apply for loans.
      Otherwise, an error message will be sent back.
-     * @param borrower the member who makes a clain for reimbursement
+     * @param borrower the member who apply for a loan
      */
     function checkIncubation(address borrower) public view onlyMember {
-        require(borrower != address(0), "Comunity: The borrower address is empty.");
+        require(borrower != address(0), "Community: The borrower address is empty.");
 
         uint currentTime = block.timestamp;
         uint joinTime = members[borrower].joinTime;
 
-        require(currentTime > (joinTime + waitingTime), "Comunity: Borrower is still in waiting time and not allowed to apply for loans yet.");
+        require(currentTime > (joinTime + waitingTime), "Community: Borrower is still in waiting time and not allowed to apply for loans yet.");
     }   
 }
