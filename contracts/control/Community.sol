@@ -2,9 +2,8 @@
 pragma solidity ^0.8.0;
 
 import "./../data/DataStructure.sol";
-import "./Fund.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
 import "./../access/Roles.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
  * @author George Qing, Jieshu Tech. Ltd.

@@ -2,12 +2,14 @@
 pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/access/AccessControl.sol";
+import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
+import "./Fund.sol";
 
 /**
  * @dev This contract manages the voting process of the mutual lending service. Whenever a customer applies for a loan,
   dozens of randomly selected lending fund providers representing the whole community will vote on this loan application to decide whether to confirm it or decline it.
  */
-contract Voting is AccessControl {    
+contract Voting is AccessControl, VRFConsumerBase {    
     struct Ballot {
         uint loanApplicationId; // the loan application to which the ballot is associated with
         address borrower; // the person who makes the loan application for loan
@@ -20,11 +22,6 @@ contract Voting is AccessControl {
         mapping(address => uint) votingTime; // record the time when each voter casts its vote
         mapping(address => bool) votingDecisions; // record each voter's voting decision
         mapping(address => bool) voters; // selected members who are granted the voting right for this loan application
-    }
-
-    constructor() {
-        // grant the admin_roles to contract creator
-        grantRole(ADMIN_ROLES, msg.sender);
     }
 
     // the state of the Ballot
@@ -48,6 +45,9 @@ contract Voting is AccessControl {
 
     uint private minimumWindow = 86400; // the minimum time needed for the voting process. A default value can be set as one day, or perhaps one week, which will be a more reasonable value
 
+    bytes32 internal keyHash;
+    uint256 internal fee;
+    mapping(bytes32 => uint) reqeustIdToBallotId; // Mapping requestId to ballotId.
 
     event NoSuchBallot(uint indexed ballotId, address indexed voter);
     event BallotInFinishedState(uint indexed ballotId, address indexed voter);
@@ -58,6 +58,28 @@ contract Voting is AccessControl {
     event VotingRoleGranted(uint ballotId);
     event NumberOfVotersTooSmall(uint numberOfVoters);
     event NumberOfVotersUpdated(uint numberOfVoters);
+
+
+    /**
+     * Constructor inherits VRFConsumerBase
+     * 
+     * Network: Kovan
+     * Chainlink VRF Coordinator address: 0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9
+     * LINK token address:                0xa36085F69e2889c224210F603D836748e7dC0088
+     * Key Hash: 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4
+     */
+    constructor()
+        VRFConsumerBase(
+            0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9, // VRF Coordinator
+            0xa36085F69e2889c224210F603D836748e7dC0088  // LINK Token
+        )
+    {
+        // grant the admin_roles to contract creator
+        grantRole(ADMIN_ROLES, msg.sender);
+
+        keyHash = 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4;
+        fee = 0.1 * 10 ** 18; // 0.1 LINK (Varies by network)        
+    }    
 
     /**
      * @dev Ramdonly selected members, representing the whole community, will vote on the loan application. The system works in a way similar to the US judicial system.
@@ -131,10 +153,10 @@ contract Voting is AccessControl {
      * @param ballotId BallotId of the ballot for which qualified voters will be selected
      */
     function selectQualifiedVoters(uint ballotId) internal onlyRole(ADMIN_ROLES) ballotExist(ballotId) returns (address[] memory) {
-        // In a future version
         // first generate a random number
-
         // then use this generated number as an index to access the candidate
+        bytes32 requestId = getRandomNumber();
+        reqeustIdToBallotId[requestId] = ballotId;
     }
 
     /**
@@ -144,9 +166,7 @@ contract Voting is AccessControl {
 
        Only admin_roles can perform grantVotingRole action
      */
-    function grantVotingRole(uint ballotId) public onlyRole(ADMIN_ROLES) ballotExist(ballotId) {
-
-        address[] memory voters = selectQualifiedVoters(ballotId);
+    function grantVotingRole(uint ballotId, address[] memory voters) public onlyRole(ADMIN_ROLES) ballotExist(ballotId) {
 
         for(uint i=0; i < voters.length; i ++) {
             address voter = voters[i];
@@ -183,5 +203,39 @@ contract Voting is AccessControl {
 
         emit NumberOfVotersUpdated(numberOfVoters);
     }
+
+
+    /** 
+     * Requests randomness 
+     */
+    function getRandomNumber() public returns (bytes32 requestId) {
+        require(LINK.balanceOf(address(this)) >= fee, "Voting: Not enough LINK.");
+
+        return requestRandomness(keyHash, fee);
+    }    
+
+    /**
+     * Callback function used by VRF Coordinator
+     */
+    function fulfillRandomness(bytes32 requestId, uint256 randomness) internal override {
+        // get the number of investors in the community
+        Fund fund = new Fund();
+        uint investorNum = fund.getInvestorCount();
+
+        // Set the size for the index array
+
+        // Generate random indexes for the investor array
+        // The number of randomly generated indexes, which will be needed to select voters from the investor array for the loan approval
+        uint[] memory indexes = new uint[](numVoters);
+        // Getting multiple random numbers from a single VRF response, "investorNum" will be used as the range for the random number
+        for (uint256 i = 0; i < numVoters; i++) {
+            indexes[i] = (uint256(keccak256(abi.encode(randomness, i))) % investorNum) + 1;
+        }   
+
+        // get the ballotId from requestId
+        uint ballotId = reqeustIdToBallotId[requestId];
+        address[] memory voters = fund.getQualifiedVoters(indexes);
+        grantVotingRole(ballotId, voters);
+    }        
 
 }

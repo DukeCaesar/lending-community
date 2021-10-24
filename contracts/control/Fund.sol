@@ -49,6 +49,21 @@ contract Fund is Roles, DataStructure, AccessControl {
     }
 
     /**
+     * @dev get the number of members who have invested into the community
+     */
+    function getInvestorCount() external view returns (uint) {
+        return investors.length;
+    }       
+
+    /**
+     * @dev get a investor subset with the indexes
+     */
+    function getQualifiedVoters(uint[] memory indexes) external view returns (address[] memory) {
+        
+    }           
+
+
+    /**
      * @dev Community members can invest into the lending fund and earn interests
      */
     function deposit() external payable {
