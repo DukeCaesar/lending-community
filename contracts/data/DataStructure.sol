@@ -51,4 +51,10 @@ contract DataStructure {
         uint interestPaid; // the aggregate interests paid by the borrower
         bool fullyRepaid; // whether this loan is fully repaid back by the borrower
     }
+
+    // the state of the Ballot
+    enum BallotState {
+        CREATED,
+        FINISHED
+    }    
 }

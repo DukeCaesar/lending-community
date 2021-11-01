@@ -4,12 +4,14 @@ pragma solidity ^0.8.0;
 import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@chainlink/contracts/src/v0.8/VRFConsumerBase.sol";
 import "./Fund.sol";
+import "./../access/Roles.sol";
+import "./../data/DataStructure.sol";
 
 /**
  * @dev This contract manages the voting process of the mutual lending service. Whenever a customer applies for a loan,
   dozens of randomly selected lending fund providers representing the whole community will vote on this loan application to decide whether to confirm it or decline it.
  */
-contract Voting is AccessControl, VRFConsumerBase {    
+contract Voting is Roles, AccessControl, DataStructure, VRFConsumerBase {    
     struct Ballot {
         uint loanApplicationId; // the loan application to which the ballot is associated with
         address borrower; // the person who makes the loan application for loan
@@ -23,15 +25,6 @@ contract Voting is AccessControl, VRFConsumerBase {
         mapping(address => bool) votingDecisions; // record each voter's voting decision
         mapping(address => bool) voters; // selected members who are granted the voting right for this loan application
     }
-
-    // the state of the Ballot
-    enum BallotState {
-        CREATED,
-        FINISHED
-    }
-    
-    
-    bytes32 constant private ADMIN_ROLES = "admin_roles";
     
     /**
      @dev numVoters the default number of members of the decision committee for loan application.
@@ -47,7 +40,7 @@ contract Voting is AccessControl, VRFConsumerBase {
 
     bytes32 internal keyHash;
     uint256 internal fee;
-    mapping(bytes32 => uint) reqeustIdToBallotId; // Mapping requestId to ballotId.
+    mapping(bytes32 => uint) reqeustIdToBallotId; // Mapping Chainlink randomness requestId to ballotId.    
 
     event NoSuchBallot(uint indexed ballotId, address indexed voter);
     event BallotInFinishedState(uint indexed ballotId, address indexed voter);
@@ -63,21 +56,35 @@ contract Voting is AccessControl, VRFConsumerBase {
     /**
      * Constructor inherits VRFConsumerBase
      * 
+     *
+     * Network: Rinkeby
+     * Chainlink VRF Coordinator address: 0xb3dCcb4Cf7a26f6cf6B120Cf5A73875B7BBc655B
+     * LINK token address:                0x01BE23585060835E02B77ef475b0Cc51aA1e0709
+     * Key Hash: 0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311
+     * Fee: 0.1 LINK
+     *
      * Network: Kovan
      * Chainlink VRF Coordinator address: 0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9
      * LINK token address:                0xa36085F69e2889c224210F603D836748e7dC0088
      * Key Hash: 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4
+     * Fee: 0.1 LINK
+     *
+     * Network: Ethereum Mainnet
+     * Chainlink VRF Coordinator address: 0xf0d54349aDdcf704F77AE15b96510dEA15cb7952
+     * LINK token address:                0x514910771AF9Ca656af840dff83E8264EcF986CA
+     * Key Hash: 0xAA77729D3466CA35AE8D28B3BBAC7CC36A5031EFDC430821C02BC31A238AF445
+     * Fee: 2 LINK
      */
     constructor()
         VRFConsumerBase(
-            0xdD3782915140c8f3b190B5D67eAc6dc5760C46E9, // VRF Coordinator
-            0xa36085F69e2889c224210F603D836748e7dC0088  // LINK Token
+            0xb3dCcb4Cf7a26f6cf6B120Cf5A73875B7BBc655B, // VRF Coordinator
+            0x01BE23585060835E02B77ef475b0Cc51aA1e0709  // LINK Token
         )
     {
         // grant the admin_roles to contract creator
-        grantRole(ADMIN_ROLES, msg.sender);
+        grantRole(ADMIN_ROLE, msg.sender);
 
-        keyHash = 0x6c3699283bda56ad74f6b855546325b68d482e983852a7a82979cc4807b641f4;
+        keyHash = 0x2ed0feb3e7fd2022120aa84fab1945545a9f2ffc9076fd6156fa96eaff4c1311;
         fee = 0.1 * 10 ** 18; // 0.1 LINK (Varies by network)        
     }    
 
@@ -152,7 +159,7 @@ contract Voting is AccessControl, VRFConsumerBase {
       Qualified community memebers refer to those who has a material interest in the community, which means they have invest a sizealbe assest in the community fund.
      * @param ballotId BallotId of the ballot for which qualified voters will be selected
      */
-    function selectQualifiedVoters(uint ballotId) internal onlyRole(ADMIN_ROLES) ballotExist(ballotId) returns (address[] memory) {
+    function selectQualifiedVoters(uint ballotId) internal onlyRole(ADMIN_ROLE) ballotExist(ballotId) returns (address[] memory) {
         // first generate a random number
         // then use this generated number as an index to access the candidate
         bytes32 requestId = getRandomNumber();
@@ -166,7 +173,7 @@ contract Voting is AccessControl, VRFConsumerBase {
 
        Only admin_roles can perform grantVotingRole action
      */
-    function grantVotingRole(uint ballotId, address[] memory voters) public onlyRole(ADMIN_ROLES) ballotExist(ballotId) {
+    function grantVotingRole(uint ballotId, address[] memory voters) public onlyRole(ADMIN_ROLE) ballotExist(ballotId) {
 
         for(uint i=0; i < voters.length; i ++) {
             address voter = voters[i];
@@ -194,7 +201,7 @@ contract Voting is AccessControl, VRFConsumerBase {
      * @dev Set a new number of voters for loan decision committee
        @param numberOfVoters The new number of voters
      */
-    function setNumVoters(uint numberOfVoters) public onlyRole(ADMIN_ROLES) {
+    function setNumVoters(uint numberOfVoters) public onlyRole(ADMIN_ROLE) {
         require(numberOfVoters >= minimumNumVoters, "Voting: New number of voters is too small.");
 
         // emit NumberOfVotersTooSmall(numberOfVoters);

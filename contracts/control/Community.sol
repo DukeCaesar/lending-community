@@ -32,7 +32,7 @@ contract Community is Roles, DataStructure, AccessControl {
         // When a contract is created, its constructor is executed once.
         // grant the admin_roles to contract creator
         // Here can be problematic 这儿会有问题
-        grantRole(ADMIN_ROLES, msg.sender);
+        grantRole(ADMIN_ROLE, msg.sender);
     }
 
     /**
@@ -93,7 +93,7 @@ contract Community is Roles, DataStructure, AccessControl {
     /**
      * @dev set the waiting period for a new member before he or she can apply for loans. Only allowed for administrative roles.
      */
-    function setWaitingTime(uint _waitingTime) external onlyRole(ADMIN_ROLES) {
+    function setWaitingTime(uint _waitingTime) external onlyRole(ADMIN_ROLE) {
         waitingTime = _waitingTime;
     }
 

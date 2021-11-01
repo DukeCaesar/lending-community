@@ -125,7 +125,7 @@ contract Fund is Roles, DataStructure, AccessControl {
      * @dev Set the lock time for a deposit. The deposit can only be withdrawn after the lock time
      * @param lockTime The new lock time.
      */
-    function setDepositLockTime(uint lockTime) public onlyRole(ADMIN_ROLES) {
+    function setDepositLockTime(uint lockTime) public onlyRole(ADMIN_ROLE) {
         require(lockTime > depositLockTime, "Fund: The new lock time is smalller than the default value.");
         uint oldLockTime = depositLockTime;
         depositLockTime = lockTime;
@@ -138,7 +138,7 @@ contract Fund is Roles, DataStructure, AccessControl {
      * @param applicationId The id of the loan application
      * Only admin can call this function
      */
-    function grantLoan(uint applicationId) public onlyRole(ADMIN_ROLES) {
+    function grantLoan(uint applicationId) public onlyRole(ADMIN_ROLE) {
         LoanApplication loanApplication = new LoanApplication();
         Application memory application = loanApplication.getApplication(applicationId);
 
@@ -242,7 +242,7 @@ contract Fund is Roles, DataStructure, AccessControl {
      * @dev Interest income is distributed among investors who have deposited fund into the community
      * @return completed Returns a bool indicating whether the distrubtion has iterated all investors.
      */
-    function distributeInterest() external payable onlyRole(ADMIN_ROLES) returns(bool completed){
+    function distributeInterest() external payable onlyRole(ADMIN_ROLE) returns(bool completed){
         require(interestsReceived > 0, "Fund: No interests to be distributed yet.");
 
         uint investorNum = investors.length;
